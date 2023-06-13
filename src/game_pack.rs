@@ -15,11 +15,9 @@ impl GamePack {
         let mut arch = zip::ZipArchive::new(file)?;
 
         let mut config_data = String::new();
-        arch.by_name("package.json")
-            .unwrap()
-            .read_to_string(&mut config_data)
-            .unwrap();
-        let config = serde_json::from_str(&config_data).unwrap();
+        arch.by_name("package.json")?
+            .read_to_string(&mut config_data)?;
+        let config = serde_json::from_str(&config_data)?;
 
         Ok(Self {
             archiver: arch,
@@ -40,6 +38,7 @@ impl GamePack {
             None
         }
     }
+    /** Read script in `scripts/` */
     pub fn get_script(&mut self, name: &str) -> IOResult<String> {
         let mut data = String::new();
         self.archiver
@@ -47,6 +46,7 @@ impl GamePack {
             .read_to_string(&mut data)?;
         Ok(data)
     }
+    /** Read script in `resources/` */
     pub fn get_resource(&mut self, name: &str) -> IOResult<Vec<u8>> {
         self.read(&format!("resources/{}", name))
     }

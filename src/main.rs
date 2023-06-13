@@ -8,6 +8,13 @@ use sdl2::rect::{Point, Rect};
 use std::collections::HashMap;
 use std::io::Result as IOResult;
 
+use script::Instruction;
+
+#[derive(Default)]
+struct Content {
+    scene: String,
+}
+
 fn draw_dialog(
     saying: &str,
     character: Option<String>,
@@ -47,11 +54,11 @@ fn draw_dialog(
     }
 
     /* draw character name */
-    if character.is_some() {
+    if let Some(character) = character {
         let font = ttf_context.load_font(font_name, 36).unwrap();
         let texture = text_creator
             .create_texture_from_surface(
-                font.render(&character.unwrap())
+                font.render(&character)
                     .blended(Color::RGB(255, 255, 255))
                     .unwrap(),
             )
@@ -90,21 +97,31 @@ fn draw_background(
 }
 
 pub fn main() -> IOResult<()> {
-    let mut current_background = String::new();
     let args: Vec<String> = std::env::args().collect();
     let pack_path = args[1].clone();
     let pack = game_pack::GamePack::open(&pack_path)?;
     let mut script = script::Script::new(pack);
-    script.parse(&script.pack.get_config("start").unwrap())?;
+    script.parse(
+        &script
+            .pack
+            .get_config("start")
+            .expect("\"start\" does not defined in package.json."),
+    )?;
 
     let config: HashMap<String, String> =
-        serde_json::from_str(&std::fs::read_to_string("config.json").unwrap()).unwrap();
+        serde_json::from_str(&std::fs::read_to_string("config.json")?)?;
 
     let content = sdl2::init().unwrap();
     let video = content.video().unwrap();
-    let window = video.window("31Gal", 800, 600).build().unwrap();
+    let window = video.window("31Gal", 800, 600).resizable().build().unwrap();
     let mut events = content.event_pump().unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
+
+    let mut content = Content::default();
+
+    if let Some(title) = script.pack.get_config("title") {
+        canvas.window_mut().set_title(&title).unwrap();
+    }
 
     'running: loop {
         for event in events.poll_iter() {
@@ -115,10 +132,10 @@ pub fn main() -> IOResult<()> {
                 Event::MouseButtonUp { .. } => {
                     let instruction = script.step().clone();
                     match instruction {
-                        script::Instruction::Say { saying, character } => {
+                        Instruction::Say { saying, character } => {
                             canvas.clear();
-                            if current_background != "" {
-                                let bytes = script.pack.get_resource(&current_background).unwrap();
+                            if !content.scene.is_empty() {
+                                let bytes = script.pack.get_resource(&content.scene)?;
                                 draw_background(&bytes, &mut canvas, Point::new(800, 600));
                             }
                             draw_dialog(
@@ -129,12 +146,28 @@ pub fn main() -> IOResult<()> {
                                 Point::new(800, 600),
                             );
                         }
-                        script::Instruction::Scene { resource } => {
-                            let bytes = script.pack.get_resource(&resource).unwrap();
-                            draw_background(&bytes, &mut canvas, Point::new(800, 600));
+                        Instruction::Scene { resource } => {
+                            let bytes = script.pack.get_resource(&resource)?;
+                            let (x, y) = canvas.window().size();
+                            draw_background(&bytes, &mut canvas, Point::new(x as i32, y as i32));
 
-                            current_background = resource.to_owned();
+                            content.scene = resource;
                         }
+                        Instruction::Switch { label } => {
+                            let step = script.get_label(&label);
+                            script.switch_to(step.unwrap());
+                        }
+                        _ => {}
+                    }
+                }
+                Event::Window {
+                    win_event: sdl2::event::WindowEvent::Resized(_x, _y),
+                    ..
+                } => {
+                    if !content.scene.is_empty() {
+                        let bytes = script.pack.get_resource(&content.scene).unwrap();
+                        let (x, y) = canvas.window().size();
+                        draw_background(&bytes, &mut canvas, Point::new(x as i32, y as i32));
                     }
                 }
                 _ => {}

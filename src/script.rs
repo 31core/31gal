@@ -23,15 +23,15 @@ impl Script {
     pub fn parse(&mut self, name: &str) -> IOResult<()> {
         self.script = name.to_owned();
         self.instructions.clear();
-        for line in self.pack.get_script(name)?.split("\n") {
+        for line in self.pack.get_script(name)?.split('\n') {
             let mut tokens = Vec::new();
-            for token in line.split(" ").collect::<Vec<&str>>() {
-                if token == "" {
+            for token in line.split(' ').collect::<Vec<&str>>() {
+                if token.is_empty() {
                     continue;
                 }
                 tokens.push(token.replace("\\n", "\n"));
             }
-            if tokens.len() == 0 {
+            if tokens.is_empty() {
                 continue;
             }
 
@@ -54,6 +54,16 @@ impl Script {
                         resource: tokens[1].to_owned(),
                     });
                 }
+                "switch" => {
+                    self.instructions.push(Instruction::Switch {
+                        label: tokens[1].to_owned(),
+                    });
+                }
+                "label" => {
+                    self.instructions.push(Instruction::Label {
+                        label: tokens[1].to_owned(),
+                    });
+                }
                 _ => {}
             }
         }
@@ -62,6 +72,19 @@ impl Script {
     pub fn step(&mut self) -> &Instruction {
         self.step += 1;
         &self.instructions[self.step - 1]
+    }
+    pub fn get_label(&self, label: &str) -> Option<usize> {
+        for (count, i) in self.instructions.iter().enumerate() {
+            if let Instruction::Label { label: this_label } = i {
+                if this_label == label {
+                    return Some(count + 1);
+                }
+            }
+        }
+        None
+    }
+    pub fn switch_to(&mut self, step: usize) {
+        self.step = step
     }
 }
 
@@ -73,5 +96,11 @@ pub enum Instruction {
     },
     Scene {
         resource: String,
+    },
+    Switch {
+        label: String,
+    },
+    Label {
+        label: String,
     },
 }
