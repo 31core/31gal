@@ -4,7 +4,8 @@ mod script;
 use sdl2::event::Event;
 use sdl2::image::LoadTexture;
 use sdl2::pixels::Color;
-use sdl2::rect::{Point, Rect};
+use sdl2::rect::Rect;
+use sdl2::render::Canvas;
 use std::collections::HashMap;
 use std::io::Result as IOResult;
 
@@ -12,29 +13,33 @@ use script::Instruction;
 
 #[derive(Default)]
 struct Content {
+    character: Option<String>,
+    saying: String,
     scene: String,
 }
 
 fn draw_dialog(
     saying: &str,
     character: Option<String>,
-    canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
+    canvas: &mut Canvas<sdl2::video::Window>,
     font_name: &str,
-    screen_size: Point,
 ) {
-    const BOARDER_SIZE_X: i32 = 100;
-    const BOARDER_SIZE_Y: i32 = 400;
+    const BOARDER_SIZE_PERCENT_X: f32 = 0.1;
+    const BOARDER_SIZE_PERCENT_Y: f32 = 0.8;
     let ttf_context = sdl2::ttf::init().unwrap();
     let font = ttf_context.load_font(font_name, 24).unwrap();
     let text_creator = canvas.texture_creator();
 
-    let mut x = BOARDER_SIZE_X;
-    let mut y = BOARDER_SIZE_Y;
+    let mut x = (BOARDER_SIZE_PERCENT_X * canvas.window().size().0 as f32) as u32;
+    let mut y = (BOARDER_SIZE_PERCENT_Y * canvas.window().size().1 as f32) as u32;
+    /* draw saying */
     for word in saying.chars() {
         /* turn to a new line */
-        if x > screen_size.x() - BOARDER_SIZE_X {
-            x = BOARDER_SIZE_X;
-            y += font.size_of_char(word).unwrap().1 as i32;
+        if x > canvas.window().size().0
+            - (BOARDER_SIZE_PERCENT_X * canvas.window().size().0 as f32) as u32
+        {
+            x = (BOARDER_SIZE_PERCENT_X * canvas.window().size().0 as f32) as u32;
+            y += font.size_of_char(word).unwrap().1;
         }
         let texture = text_creator
             .create_texture_from_surface(
@@ -47,10 +52,15 @@ fn draw_dialog(
             .copy(
                 &texture,
                 None,
-                Rect::new(x, y, texture.query().width, texture.query().height),
+                Rect::new(
+                    x as i32,
+                    y as i32,
+                    texture.query().width,
+                    texture.query().height,
+                ),
             )
             .unwrap();
-        x += texture.query().width as i32;
+        x += texture.query().width;
     }
 
     /* draw character name */
@@ -68,8 +78,8 @@ fn draw_dialog(
                 &texture,
                 None,
                 Rect::new(
-                    BOARDER_SIZE_X,
-                    300,
+                    (BOARDER_SIZE_PERCENT_X * canvas.window().size().0 as f32) as i32,
+                    (BOARDER_SIZE_PERCENT_Y * canvas.window().size().1 as f32) as i32,
                     texture.query().width,
                     texture.query().height,
                 ),
@@ -79,18 +89,14 @@ fn draw_dialog(
     canvas.present();
 }
 
-fn draw_background(
-    image_bytes: &[u8],
-    canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
-    screen_size: Point,
-) {
+fn draw_background(image_bytes: &[u8], canvas: &mut Canvas<sdl2::video::Window>) {
     let text_creator = canvas.texture_creator();
     let texture = text_creator.load_texture_bytes(image_bytes).unwrap();
     canvas
         .copy(
             &texture,
             None,
-            Rect::new(0, 0, screen_size.x() as u32, screen_size.y() as u32),
+            Rect::new(0, 0, canvas.window().size().0, canvas.window().size().1),
         )
         .unwrap();
     canvas.present();
@@ -105,7 +111,7 @@ pub fn main() -> IOResult<()> {
         &script
             .pack
             .get_config("start")
-            .expect("\"start\" does not defined in package.json."),
+            .expect("'start' does not defined in package.json."),
     )?;
 
     let config: HashMap<String, String> =
@@ -136,26 +142,29 @@ pub fn main() -> IOResult<()> {
                             canvas.clear();
                             if !content.scene.is_empty() {
                                 let bytes = script.pack.get_resource(&content.scene)?;
-                                draw_background(&bytes, &mut canvas, Point::new(800, 600));
+                                draw_background(&bytes, &mut canvas);
                             }
                             draw_dialog(
                                 &saying,
                                 character.clone(),
                                 &mut canvas,
-                                &config["font"],
-                                Point::new(800, 600),
+                                &config
+                                    .get("font")
+                                    .expect("'font' is not defined in config.json"),
                             );
+
+                            content.saying = saying;
+                            content.character = character;
                         }
                         Instruction::Scene { resource } => {
                             let bytes = script.pack.get_resource(&resource)?;
-                            let (x, y) = canvas.window().size();
-                            draw_background(&bytes, &mut canvas, Point::new(x as i32, y as i32));
+                            draw_background(&bytes, &mut canvas);
 
                             content.scene = resource;
                         }
                         Instruction::Switch { label } => {
                             let step = script.get_label(&label);
-                            script.switch_to(step.unwrap());
+                            script.switch_to(step.expect(&format!("'{}' is not defined", label)));
                         }
                         _ => {}
                     }
@@ -164,11 +173,19 @@ pub fn main() -> IOResult<()> {
                     win_event: sdl2::event::WindowEvent::Resized(_x, _y),
                     ..
                 } => {
-                    if !content.scene.is_empty() {
-                        let bytes = script.pack.get_resource(&content.scene).unwrap();
-                        let (x, y) = canvas.window().size();
-                        draw_background(&bytes, &mut canvas, Point::new(x as i32, y as i32));
+                    canvas.clear();
+                    if let Ok(bytes) = script.pack.get_resource(&content.scene) {
+                        draw_background(&bytes, &mut canvas);
                     }
+
+                    draw_dialog(
+                        &content.saying,
+                        content.character.clone(),
+                        &mut canvas,
+                        &config
+                            .get("font")
+                            .expect("'font' is not defined in config.json"),
+                    );
                 }
                 _ => {}
             }
