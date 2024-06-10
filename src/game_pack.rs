@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::Result as IOResult;
 
+#[derive(Debug)]
 pub struct GamePack {
     archiver: zip::ZipArchive<std::fs::File>,
     #[allow(dead_code)]
@@ -32,7 +33,7 @@ impl GamePack {
         Ok(data)
     }
     pub fn get_config(&self, key: &str) -> Option<String> {
-        if self.config.get(key).is_some() {
+        if self.config.contains_key(key) {
             Some(self.config.get(key).unwrap().to_owned())
         } else {
             None

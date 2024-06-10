@@ -1,17 +1,16 @@
-use super::game_pack::GamePack;
+use crate::game_pack::GamePack;
 use std::io::Result as IOResult;
 
+#[derive(Debug)]
 pub struct Script {
-    pub pack: GamePack,
     script: String,
     step: usize,
-    instructions: Vec<Instruction>,
+    pub instructions: Vec<Instruction>,
 }
 
 impl Script {
-    pub fn new(pack: GamePack) -> Self {
+    pub fn new() -> Self {
         Self {
-            pack,
             script: String::new(),
             step: 0,
             instructions: Vec::new(),
@@ -20,10 +19,10 @@ impl Script {
     /*
      * Parse script
      */
-    pub fn parse(&mut self, name: &str) -> IOResult<()> {
-        self.script = name.to_owned();
+    pub fn parse(&mut self, name: &str, pack: &mut GamePack) -> IOResult<()> {
+        name.clone_into(&mut self.script);
         self.instructions.clear();
-        for line in self.pack.get_script(name)?.split('\n') {
+        for line in pack.get_script(name)?.split('\n') {
             let mut tokens = Vec::new();
             for token in line.split(' ').collect::<Vec<&str>>() {
                 if token.is_empty() {
@@ -85,6 +84,52 @@ impl Script {
     }
     pub fn switch_to(&mut self, step: usize) {
         self.step = step
+    }
+    fn execute_single_instruction(
+        &mut self,
+        pack: &mut GamePack,
+        content: &mut crate::Content,
+        canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
+        font_name: &str,
+    ) -> std::io::Result<()> {
+        let instruction = self.step().clone();
+        match instruction {
+            Instruction::Say { saying, character } => {
+                content.saying = saying;
+                content.character = character;
+
+                crate::window::redraw(pack, canvas, content, font_name);
+            }
+            Instruction::Scene { resource } => {
+                let bytes = pack.get_resource(&resource)?;
+                crate::window::draw_background(&bytes, canvas);
+
+                content.scene = resource;
+            }
+            Instruction::Switch { label } => {
+                let step = self.get_label(&label);
+                self.switch_to(step.unwrap_or_else(|| panic!("'{}' is not defined", label)));
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    pub fn execute_script(
+        &mut self,
+        pack: &mut GamePack,
+        content: &mut crate::Content,
+        canvas: &mut sdl2::render::Canvas<sdl2::video::Window>,
+        font_name: &str,
+    ) -> std::io::Result<()> {
+        loop {
+            if let Instruction::Say { .. } = self.instructions[self.step] {
+                self.execute_single_instruction(pack, content, canvas, font_name)?;
+                break;
+            } else {
+                self.execute_single_instruction(pack, content, canvas, font_name)?;
+            }
+        }
+        Ok(())
     }
 }
 
