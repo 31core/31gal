@@ -11,7 +11,7 @@ pub fn redraw(
     canvas: &mut Canvas<Window>,
     content: &mut Content,
     font_name: &str,
-) {
+) -> anyhow::Result<()> {
     canvas.clear();
     if let Ok(bytes) = pack.get_resource(&content.scene) {
         draw_background(&bytes, canvas);
@@ -22,9 +22,11 @@ pub fn redraw(
         content.character.clone(),
         canvas,
         font_name,
-    );
+    )?;
 
     canvas.present();
+
+    Ok(())
 }
 
 pub fn draw_dialog(
@@ -32,7 +34,7 @@ pub fn draw_dialog(
     character: Option<String>,
     canvas: &mut Canvas<Window>,
     font_name: &str,
-) {
+) -> anyhow::Result<()> {
     const BOARDER_SIZE_PERCENT_X: f32 = 0.1;
     const BOARDER_SIZE_PERCENT_Y: f32 = 0.8;
     let ttf_context = sdl2::ttf::init().unwrap();
@@ -48,15 +50,12 @@ pub fn draw_dialog(
             - (BOARDER_SIZE_PERCENT_X * canvas.window().size().0 as f32) as u32
         {
             x = (BOARDER_SIZE_PERCENT_X * canvas.window().size().0 as f32) as u32;
-            y += font.size_of_char(word).unwrap().1;
+            y += font.size_of_char(word)?.1;
         }
-        let texture = text_creator
-            .create_texture_from_surface(
-                font.render(&String::from(word))
-                    .blended(Color::RGB(255, 255, 255))
-                    .unwrap(),
-            )
-            .unwrap();
+        let texture = text_creator.create_texture_from_surface(
+            font.render(&String::from(word))
+                .blended(Color::RGB(255, 255, 255))?,
+        )?;
         canvas
             .copy(
                 &texture,
@@ -75,26 +74,24 @@ pub fn draw_dialog(
     /* draw character name */
     if let Some(character) = character {
         let font = ttf_context.load_font(font_name, 36).unwrap();
-        let texture = text_creator
-            .create_texture_from_surface(
-                font.render(&character)
-                    .blended(Color::RGB(255, 255, 255))
-                    .unwrap(),
-            )
-            .unwrap();
+        let texture = text_creator.create_texture_from_surface(
+            font.render(&character).blended(Color::RGB(255, 255, 255))?,
+        )?;
         canvas
             .copy(
                 &texture,
                 None,
                 Rect::new(
                     (BOARDER_SIZE_PERCENT_X * canvas.window().size().0 as f32) as i32,
-                    (BOARDER_SIZE_PERCENT_Y * canvas.window().size().1 as f32) as i32,
+                    ((BOARDER_SIZE_PERCENT_Y - 0.07) * canvas.window().size().1 as f32) as i32,
                     texture.query().width,
                     texture.query().height,
                 ),
             )
             .unwrap();
     }
+
+    Ok(())
 }
 
 pub fn draw_background(image_bytes: &[u8], canvas: &mut Canvas<Window>) {

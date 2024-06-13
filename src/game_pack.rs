@@ -5,8 +5,6 @@ use std::io::Result as IOResult;
 #[derive(Debug)]
 pub struct GamePack {
     archiver: zip::ZipArchive<std::fs::File>,
-    #[allow(dead_code)]
-    filename: String,
     config: HashMap<String, String>,
 }
 
@@ -22,7 +20,6 @@ impl GamePack {
 
         Ok(Self {
             archiver: arch,
-            filename: filename.to_owned(),
             config,
         })
     }
@@ -47,7 +44,14 @@ impl GamePack {
             .read_to_string(&mut data)?;
         Ok(data)
     }
-    /** Read script in `resources/` */
+    /** Read script in `resources/`
+     *
+     * Args:
+     * * Relative path of resource file.
+     *
+     * Return:
+     * * Bytes stream of resource file.
+     */
     pub fn get_resource(&mut self, name: &str) -> IOResult<Vec<u8>> {
         self.read(&format!("resources/{}", name))
     }

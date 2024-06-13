@@ -6,11 +6,15 @@ use clap::Parser;
 use sdl2::event::Event;
 
 use std::collections::HashMap;
-use std::io::Result as IOResult;
 
 #[derive(Parser)]
+#[command(version)]
 struct Args {
     game_pack: String,
+    #[arg(short, long, default_value_t = 800)]
+    weight: u32,
+    #[arg(short = 'H', long, default_value_t = 600)]
+    height: u32,
 }
 
 #[derive(Default)]
@@ -22,7 +26,7 @@ struct Content {
     scene: String,
 }
 
-pub fn main() -> IOResult<()> {
+pub fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let mut pack = game_pack::GamePack::open(&args.game_pack)?;
     let mut script = script::Script::new();
@@ -38,9 +42,12 @@ pub fn main() -> IOResult<()> {
 
     let content = sdl2::init().unwrap();
     let video = content.video().unwrap();
-    let window = video.window("31Gal", 800, 600).resizable().build().unwrap();
+    let window = video
+        .window("31Gal", args.weight, args.height)
+        .resizable()
+        .build()?;
     let mut events = content.event_pump().unwrap();
-    let mut canvas = window.into_canvas().build().unwrap();
+    let mut canvas = window.into_canvas().build()?;
 
     let mut content = Content::default();
     let font_name = config
@@ -48,7 +55,7 @@ pub fn main() -> IOResult<()> {
         .expect("'font' is not defined in config.json");
 
     if let Some(title) = pack.get_config("title") {
-        canvas.window_mut().set_title(&title).unwrap();
+        canvas.window_mut().set_title(&title)?;
     }
 
     'running: loop {
@@ -64,7 +71,7 @@ pub fn main() -> IOResult<()> {
                     win_event: sdl2::event::WindowEvent::Resized(_x, _y),
                     ..
                 } => {
-                    window::redraw(&mut pack, &mut canvas, &mut content, font_name);
+                    window::redraw(&mut pack, &mut canvas, &mut content, font_name)?;
                 }
                 _ => {}
             }
